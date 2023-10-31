@@ -13,7 +13,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as T
 import matplotlib.pyplot as plt
-from PIL import ImageEnhance
 
 class EMNISTDataset(Dataset):
     def __init__(self, train: bool, path: str, device: torch.device) -> None:
@@ -52,11 +51,13 @@ class EMNISTDataset(Dataset):
 
 
         # Retrieve an image and label
-        index = 54
+        index = 20
         image = self.xs[index]
         label = self.ys[index]
         # Convert tensor image to PIL image for displaying
-        pil_image = T.ToPILImage()(image) # "L" mode is for grayscale
+        img_flip = T.functional.rotate(image, -90)
+        corrected_image = T.functional.hflip(img_flip)
+        pil_image = T.ToPILImage()(corrected_image) # "L" mode is for grayscale
         # Display the image
         plt.imshow(pil_image, cmap='gray')  # Ensure the colormap is set to gray
         plt.title(f'Label: {index_to_char(label)}')
@@ -142,7 +143,7 @@ class CNN(nn.Module):
 
 def index_to_char(index):
         
-    return chr(index + 62)
+    return chr(index + 64)
     
 # def index_to_char(index):
 #         # For EMNIST "byletter" split
@@ -163,6 +164,7 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
     import torch
     import torch.onnx
+    import numpy as np
 
     def plot_image(image_path):
         img = Image.open(image_path)
@@ -172,8 +174,8 @@ if __name__ == '__main__':
 
 
 
-    choice = input("Train or Else: ")
-    if choice.lower() == "train":
+    choice = input("Train or Else: ").lower()
+    if choice == "train":
         device = torch.device('cuda')
         epochs = 3
         batch_size = 512
@@ -192,17 +194,37 @@ if __name__ == '__main__':
         model.test(test_loader)
         torch.save(model.state_dict(), 'emnist_cnn.pt')
         
-
-        # Assuming model is your trained PyTorch model
+        #Export in onnx format
         model.eval()
-
-        # Create a dummy input for the export
         dummy_input = torch.randn(1, 1, 28, 28).to('cuda')
-
-        # Export the model
         torch.onnx.export(model, dummy_input, "emnist.onnx", export_params=True)
 
+    elif (choice == "onnx"):
+        import onnxruntime as ort
+        img_path = 'testb.jpg'
+        img = Image.open(img_path)
+
+        transform = T.Compose([ T.ToTensor(),
+                                # T.Normalize((0.5, ), (0.5, )),
+                                T.Grayscale(num_output_channels=1),
+                            ])
         
+        img_tensor = transform(img).unsqueeze(0).numpy()
+        # Load ONNX model
+        ort_session = ort.InferenceSession("emnist.onnx")
+
+        # Run inference
+        ort_inputs = {ort_session.get_inputs()[0].name: img_tensor}
+        ort_outs = ort_session.run(None, ort_inputs)
+
+        # Process the output (assuming a single output, adapt as necessary)
+        prediction = ort_outs[0]
+        predicted_class = np.argmax(prediction)
+
+        # Print or return the predicted class
+        print(f"Predicted Class: {index_to_char(predicted_class)}")
+        
+
     else:
         model = CNN().to('cuda')
 
@@ -211,17 +233,18 @@ if __name__ == '__main__':
         model.eval()
 
         # Load and process the image
-        transform = T.Compose([T.ToTensor(),
-        T.Normalize((0.5, ), (0.5, )),
-                                    T.ColorJitter(brightness=0.2, contrast=0.2),
-                                    T.Grayscale(num_output_channels=1),
-    ])
-        img_path = 'testc2.jpg'
+        transform = T.Compose([ T.ToTensor(),
+                                # T.Normalize((0.5, ), (0.5, )),
+                                T.Grayscale(num_output_channels=1),
+                            ])
+        img_path = 'testl.jpg'
         img = Image.open(img_path)
 
         img_tensor = transform(img).unsqueeze(0).to('cuda')
 
-        prediction = model(img_tensor)
+        corrected_image = T.functional.hflip(img_tensor)
+        img_flip = T.functional.rotate(corrected_image, 90)
+        prediction = model(img_flip)
         prediction = torch.log_softmax(prediction, dim=-1)
         predicted_class = torch.argmax(prediction)
         predicted_letter = index_to_char(predicted_class.item())
