@@ -141,22 +141,28 @@ class CNN(nn.Module):
         print()
 
 def index_to_char(index):
-        # For EMNIST "byletter" split
-    if 0 <= index < 26:
-        # Uppercase letters
-        return chr(index + ord('A'))
-    elif 26 <= index < 52:
-        # Lowercase letters
-        return chr(index - 26 + ord('a'))
-    else:
-        # Out of range index
-        return None
+        
+    return chr(index + 62)
+    
+# def index_to_char(index):
+#         # For EMNIST "byletter" split
+#     if 0 <= index < 26:
+#         # Uppercase letters
+#         return chr(index + ord('A'))
+#     elif 26 <= index < 52:
+#         # Lowercase letters
+#         return chr(index - 26 + ord('a'))
+#     else:
+#         # Out of range index
+#         return None
 
 if __name__ == '__main__':
     from torch.optim import AdamW
     from torch.optim.lr_scheduler import OneCycleLR
     from PIL import Image
     import matplotlib.pyplot as plt
+    import torch
+    import torch.onnx
 
     def plot_image(image_path):
         img = Image.open(image_path)
@@ -185,6 +191,16 @@ if __name__ == '__main__':
         model.fit(train_loader, optimizer, scheduler, epochs)
         model.test(test_loader)
         torch.save(model.state_dict(), 'emnist_cnn.pt')
+        
+
+        # Assuming model is your trained PyTorch model
+        model.eval()
+
+        # Create a dummy input for the export
+        dummy_input = torch.randn(1, 1, 28, 28).to('cuda')
+
+        # Export the model
+        torch.onnx.export(model, dummy_input, "emnist.onnx", export_params=True)
 
         
     else:
@@ -200,7 +216,7 @@ if __name__ == '__main__':
                                     T.ColorJitter(brightness=0.2, contrast=0.2),
                                     T.Grayscale(num_output_channels=1),
     ])
-        img_path = 'testl.jpg'
+        img_path = 'testc2.jpg'
         img = Image.open(img_path)
 
         img_tensor = transform(img).unsqueeze(0).to('cuda')
@@ -208,15 +224,9 @@ if __name__ == '__main__':
         prediction = model(img_tensor)
         prediction = torch.log_softmax(prediction, dim=-1)
         predicted_class = torch.argmax(prediction)
-        print(f'Image Tensor Shape: {img_tensor.shape}')
-    
-        print(f'Min: {torch.min(img_tensor)}, Max: {torch.max(img_tensor)}')
-        print(prediction)
-        print(index_to_char(predicted_class.item()),predicted_class.item())
-        #plot_image(img_path)
-        print(img_tensor.shape)
-        pil_image = T.ToPILImage()(img_tensor.squeeze(0)) # "L" mode is for grayscale
+        predicted_letter = index_to_char(predicted_class.item())
+        pil_image = T.ToPILImage()(img_tensor.squeeze(0))
         # Display the image
         plt.imshow(pil_image, cmap='gray')  # Ensure the colormap is set to gray
-        # plt.title(f'Label: {index_to_char(label)}')
+        plt.title(f'Label: {predicted_letter}')
         plt.show()
