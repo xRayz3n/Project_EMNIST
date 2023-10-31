@@ -201,7 +201,7 @@ if __name__ == '__main__':
 
     elif (choice == "onnx"):
         import onnxruntime as ort
-        img_path = 'testb.jpg'
+        img_path = 'testa.jpg'
         img = Image.open(img_path)
 
         transform = T.Compose([ T.ToTensor(),
@@ -209,16 +209,21 @@ if __name__ == '__main__':
                                 T.Grayscale(num_output_channels=1),
                             ])
         
-        img_tensor = transform(img).unsqueeze(0).numpy()
+        img_tensor = transform(img).unsqueeze(0)
         # Load ONNX model
+        corrected_image = T.functional.hflip(img_tensor)
+        img_flip = T.functional.rotate(corrected_image, 90)
+        img_flip = img_flip.numpy()
         ort_session = ort.InferenceSession("emnist.onnx")
 
         # Run inference
-        ort_inputs = {ort_session.get_inputs()[0].name: img_tensor}
+        ort_inputs = {ort_session.get_inputs()[0].name: img_flip}
         ort_outs = ort_session.run(None, ort_inputs)
 
         # Process the output (assuming a single output, adapt as necessary)
         prediction = ort_outs[0]
+
+        
         predicted_class = np.argmax(prediction)
 
         # Print or return the predicted class
@@ -237,7 +242,7 @@ if __name__ == '__main__':
                                 # T.Normalize((0.5, ), (0.5, )),
                                 T.Grayscale(num_output_channels=1),
                             ])
-        img_path = 'testl.jpg'
+        img_path = 'testc.jpg'
         img = Image.open(img_path)
 
         img_tensor = transform(img).unsqueeze(0).to('cuda')
