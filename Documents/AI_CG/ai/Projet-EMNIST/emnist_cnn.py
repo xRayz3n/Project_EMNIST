@@ -12,18 +12,28 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as T
+import matplotlib.pyplot as plt
+from PIL import ImageEnhance
 
 class EMNISTDataset(Dataset):
     def __init__(self, train: bool, path: str, device: torch.device) -> None:
         super().__init__()
         self.path = path
         self.prefix = 'train' if train else 'test'
-        self.path_xs = os.path.join(self.path, f'mnist_{self.prefix}_xs.pt')
-        self.path_ys = os.path.join(self.path, f'mnist_{self.prefix}_ys.pt')
-        self.transform = T.Compose([T.ToTensor(), T.Normalize((0.1307, ), (0.3081, ))])
+        self.path_xs = os.path.join(self.path, f'emnist_{self.prefix}_xs.pt')
+        self.path_ys = os.path.join(self.path, f'emnist_{self.prefix}_ys.pt')
+        
+        self.transform = T.Compose([T.ToTensor(), 
+                                    # T.Normalize((0.5, ), (0.5, )),
+                                    # T.RandomRotation(10),
+                                    # T.ColorJitter(brightness=0.2, contrast=0.2),
+                                    # T.Grayscale(num_output_channels=1),
+                                    # T.RandomAutocontrast()
+                                    ])
+
 
         if not os.path.exists(self.path_xs) or not os.path.exists(self.path_ys):
-            set = EMNIST(path, split= "byclass",train=train, download=True, transform=self.transform)
+            set = EMNIST(path, split= "letters",train=train, download=True, transform=self.transform)
             loader = DataLoader(set, batch_size=batch_size, shuffle=train)
             n = len(set)
 
@@ -33,13 +43,25 @@ class EMNISTDataset(Dataset):
             for i, (x, y) in enumerate(tqdm(loader, desc=desc)):
                 xs[i * batch_size:min((i + 1) * batch_size, n)] = x
                 ys[i * batch_size:min((i + 1) * batch_size, n)] = y
-
             torch.save(xs, self.path_xs)
             torch.save(ys, self.path_ys)
         
         self.device = device
         self.xs = torch.load(self.path_xs, map_location=self.device)
         self.ys = torch.load(self.path_ys, map_location=self.device)
+
+
+        # Retrieve an image and label
+        index = 54
+        image = self.xs[index]
+        label = self.ys[index]
+        # Convert tensor image to PIL image for displaying
+        pil_image = T.ToPILImage()(image) # "L" mode is for grayscale
+        # Display the image
+        plt.imshow(pil_image, cmap='gray')  # Ensure the colormap is set to gray
+        plt.title(f'Label: {index_to_char(label)}')
+        plt.show()
+        
     def __len__(self) -> int:
         return len(self.xs)
 
@@ -50,34 +72,36 @@ class EMNISTDataset(Dataset):
 class FeaturesDetector(nn.Module):
     def __init__(self, in_channels: int, out_channels: int) -> None:
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channels, 32, 5, 2)
-        self.conv2 = nn.Conv2d(32, 64, 3, 1)
-        self.conv3 = nn.Conv2d(64, out_channels, 3, 1)
+        self.conv1 = nn.Conv2d(in_channels, 16, 3, 1)
+        self.conv2 = nn.Conv2d(16, 24, 3, 1)
+        self.conv3 = nn.Conv2d(24, out_channels, 3, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = torch.relu(self.conv1(x))
         x = torch.relu(self.conv2(x))
-        x = torch.relu(torch.max_pool2d(self.conv3(x), 3))
+        x = torch.relu(torch.max_pool2d(self.conv3(x), 2))
         return x
 
 
 class MLP(nn.Module):
     def __init__(self, in_features: int, out_features: int) -> None:
         super().__init__()
-        self.fc1 = nn.Linear(in_features, 256)
-        self.fc2 = nn.Linear(256, out_features)
+        self.fc1 = nn.Linear(in_features, 512)
+        self.fc2 = nn.Linear(512, 256)
+        self.fc3 = nn.Linear(256, out_features)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = torch.relu(self.fc1(x))
-        x = self.fc2(x)
+        x = torch.relu(self.fc2(x))
+        x = self.fc3(x)
         return x
 
 
 class CNN(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.conv = FeaturesDetector(1, 256)
-        self.fc = MLP(1024, 62)
+        self.conv = FeaturesDetector(1, 32)
+        self.fc = MLP(3872, 52)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.conv(x)
@@ -87,6 +111,7 @@ class CNN(nn.Module):
     
     def fit(self, loader: DataLoader, optimizer: Optimizer, scheduler, epochs: int) -> None:
         self.train()
+        array_loss = []
         batches = iter(cycle(loader))
         for _ in tqdm(range(epochs * len(loader)), desc='Training'):
             x, l = next(batches)
@@ -96,6 +121,10 @@ class CNN(nn.Module):
             loss.backward()
             optimizer.step()
             scheduler.step()
+            array_loss.append(loss.item())
+
+        plt.plot(array_loss)
+        plt.show()
 
     @torch.inference_mode()
     def test(self, loader: DataLoader) -> None:
@@ -111,14 +140,36 @@ class CNN(nn.Module):
         print(f'Accuracy: {acc / len(loader.dataset) * 100:.2f}%')
         print()
 
+def index_to_char(index):
+        # For EMNIST "byletter" split
+    if 0 <= index < 26:
+        # Uppercase letters
+        return chr(index + ord('A'))
+    elif 26 <= index < 52:
+        # Lowercase letters
+        return chr(index - 26 + ord('a'))
+    else:
+        # Out of range index
+        return None
+
 if __name__ == '__main__':
     from torch.optim import AdamW
     from torch.optim.lr_scheduler import OneCycleLR
+    from PIL import Image
+    import matplotlib.pyplot as plt
+
+    def plot_image(image_path):
+        img = Image.open(image_path)
+        plt.imshow(img, cmap='gray')
+        plt.title(image_path)
+        plt.show()
+
+
 
     choice = input("Train or Else: ")
     if choice.lower() == "train":
         device = torch.device('cuda')
-        epochs = 2
+        epochs = 3
         batch_size = 512
         lr = 1e-2
         train_set = EMNISTDataset(True, '/tmp/datasets', device)
@@ -134,6 +185,38 @@ if __name__ == '__main__':
         model.fit(train_loader, optimizer, scheduler, epochs)
         model.test(test_loader)
         torch.save(model.state_dict(), 'emnist_cnn.pt')
+
+        
     else:
-        model = torch.load('emnist_cnn.pt')
-        preds = torch.argmax(logits, dim=1, keepdim=True)
+        model = CNN().to('cuda')
+
+        # Load the trained state dictionary
+        model.load_state_dict(torch.load('emnist_cnn.pt'))
+        model.eval()
+
+        # Load and process the image
+        transform = T.Compose([T.ToTensor(),
+        T.Normalize((0.5, ), (0.5, )),
+                                    T.ColorJitter(brightness=0.2, contrast=0.2),
+                                    T.Grayscale(num_output_channels=1),
+    ])
+        img_path = 'testl.jpg'
+        img = Image.open(img_path)
+
+        img_tensor = transform(img).unsqueeze(0).to('cuda')
+
+        prediction = model(img_tensor)
+        prediction = torch.log_softmax(prediction, dim=-1)
+        predicted_class = torch.argmax(prediction)
+        print(f'Image Tensor Shape: {img_tensor.shape}')
+    
+        print(f'Min: {torch.min(img_tensor)}, Max: {torch.max(img_tensor)}')
+        print(prediction)
+        print(index_to_char(predicted_class.item()),predicted_class.item())
+        #plot_image(img_path)
+        print(img_tensor.shape)
+        pil_image = T.ToPILImage()(img_tensor.squeeze(0)) # "L" mode is for grayscale
+        # Display the image
+        plt.imshow(pil_image, cmap='gray')  # Ensure the colormap is set to gray
+        # plt.title(f'Label: {index_to_char(label)}')
+        plt.show()
