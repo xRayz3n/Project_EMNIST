@@ -197,7 +197,7 @@ if __name__ == '__main__':
         #Export in onnx format
         model.eval()
         dummy_input = torch.randn(1, 1, 28, 28).to('cuda')
-        torch.onnx.export(model, dummy_input, "emnist.onnx", export_params=True)
+        torch.onnx.export(model, dummy_input, "emnist.onnx", export_params=True, opset_version=9)
 
     elif (choice == "onnx"):
         import onnxruntime as ort
