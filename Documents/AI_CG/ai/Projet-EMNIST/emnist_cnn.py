@@ -199,7 +199,7 @@ if __name__ == '__main__':
         dummy_input = torch.randn(1, 1, 28, 28).to('cuda')
         torch.onnx.export(model, dummy_input, "emnist.onnx", export_params=True, opset_version=9)
 
-    elif (choice == "onnx"):
+    elif (choice == "onnx"): #For testing onnx exported model
         import onnxruntime as ort
         img_path = 'testa.jpg'
         img = Image.open(img_path)

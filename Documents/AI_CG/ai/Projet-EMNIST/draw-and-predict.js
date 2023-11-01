@@ -1,6 +1,7 @@
-const canvas = document.getElementById('canvas');
+const canvas = document.getElementById('canvas1');
 const ctx = canvas.getContext('2d');
 let isDrawing = false;
+clear();
 
 canvas.addEventListener('mousedown', startDrawing);
 canvas.addEventListener('mousemove', draw);
@@ -14,9 +15,9 @@ function startDrawing(e) {
 
 function draw(e) {
     if (!isDrawing) return;
-    ctx.lineWidth = 10;  // Change as needed
+    ctx.lineWidth = 5;  // Change as needed
     ctx.lineCap = 'round';
-    ctx.strokeStyle = 'white';
+    ctx.strokeStyle = 'black';
     ctx.lineTo(e.clientX - canvas.offsetLeft, e.clientY - canvas.offsetTop);
     ctx.stroke();
     ctx.beginPath();
@@ -29,21 +30,72 @@ function stopDrawing() {
 }
 
 document.getElementById('clear').addEventListener('click', function() {
+    clear();
+});
+
+function clear() {
     let ctx = canvas.getContext('2d');
-    ctx.fillStyle = "black";
+    ctx.fillStyle = "white";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+document.getElementById('predict').addEventListener('click', async function() {
+    let sections = createCanvasSections(canvas, 1, 11);
+    let phrase = "";
+    for (const sectionCanvas of sections) {
+        let letter = await predict(sectionCanvas);
+        phrase += letter;
+    }
+    let validator = "IMNOTAROBOT";
+    let index = 0;
+    let count = 0;
+
+    phrase.split("").forEach(element => {
+        if (validator.split("")[index] == element)
+            count++;
+        index++;
+    });
+    if (count > 8)
+    document.getElementById('result').innerText = `You are officialy not a robot! (and a good drawer)`;
+    else
+        document.getElementById('result').innerText = `Hmm I didn't like your style, try again. Read phrase: "${phrase}"`;
+    
+
 });
-document.getElementById('predict').addEventListener('click', function() {
-    predict();
-});
-async function predict() {
+
+
+function createCanvasSections(originalCanvas, numRows, numCols) {
+    let sections = [];
+    let sectionWidth = originalCanvas.width / numCols;
+    let sectionHeight = originalCanvas.height / numRows;
+
+    for (let row = 0; row < numRows; row++) {
+        for (let col = 0; col < numCols; col++) {
+            // Create in-memory canvas
+            let tmpCanvas = document.createElement("canvas");
+            tmpCanvas.width = sectionWidth;
+            tmpCanvas.height = sectionHeight;
+            let tmpCtx = tmpCanvas.getContext('2d');
+
+            // Copy the relevant section of the original canvas
+            tmpCtx.drawImage(originalCanvas, col * sectionWidth, row * sectionHeight, 
+                             sectionWidth, sectionHeight, 0, 0, sectionWidth, sectionHeight);
+
+            sections.push(tmpCanvas);
+        }
+    }
+    return sections;
+}
+
+
+
+async function predict(canvastype) {
     // Redimensionnez l'image du canvas à 28x28
-    let tmpCanvas = document.createElement('canvas');
+    let tmpCanvas = document.createElement("canvas");
     tmpCanvas.width = 28;
     tmpCanvas.height = 28;
     let tmpCtx = tmpCanvas.getContext('2d');
-  
-    tmpCtx.drawImage(canvas, 0, 0, 28, 28);
+    tmpCtx.drawImage(canvastype, 0, 0, 28, 28);
   
   
     // Extraire les pixels et les convertir en niveaux de gris
@@ -59,15 +111,13 @@ async function predict() {
     }
   
     let input = new Float32Array(28 * 28);
-    //let array2D = [];
     for (let i = 0; i < imgData.length; i += 4) {
-        let grayscale = 0
+        let grayscale = 0;
         if (imgData[i]!=0)  {grayscale = 255}
         if (imgData[i+1]!=0)  {grayscale = 255}
         if (imgData[i+2]!=0)  {grayscale = 255}
         grayscale = (((grayscale/ 255)) - 0.1736) / 0.3317;
-        // Normaliser entre -1 et 1
-        input[i/4] = grayscale
+        input[i/4] = 1-grayscale
     }
   
     // Binariser l'image
@@ -84,22 +134,26 @@ async function predict() {
     }
 
     let tensorInput = new onnx.Tensor(transposedInput, 'float32', [1, 1, 28, 28]);
-
     let outputMap = await model.run([tensorInput]);
-    
     let outputData = outputMap.values().next().value.data;
   
     // Retourner la classe avec la plus haute probabilité
     let pred_class = outputData.indexOf(Math.max(...outputData))
     let pred_char = String.fromCharCode(pred_class + 64)
     console.log("Class: " + pred_char)
-    document.getElementById('result').innerText = `Predicted letter: ${pred_char}`;
-    return pred_class;
+    //document.getElementById('result').innerText = `Predicted letter: ${pred_char}`;
+    return pred_char;
   }
 
   async function loadModel() {
     model = new onnx.InferenceSession();
     await model.loadModel("emnist.onnx");
 }
+
+
+
+
+
+
 let model;
 loadModel()

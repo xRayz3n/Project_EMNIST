@@ -3,21 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Draw and Predict</title>
-    <style>
-        /* Simple styling for the canvas */
-        #canvas {
-            border: 1px solid black;
-            touch-action: none;
-        }
-    </style>
+    <title>Re-Re:Captcha</title>
+    
 </head>
 <body>
-    <h2>Draw a character</h2>
-    <canvas id="canvas" width="280" height="280"></canvas>
-    <button id="clear">Clear</button>
-    <button id="predict">Predict</button>
-    <p>Prediction: <span id="prediction"></span></p>
+    <h2>Prove by writing in the box below that you're not a robot</h2>
+        <canvas id="canvas1" width="616" height="56"></canvas>
+        <img id="overlay-image" src="notarobot.png" alt="Overlay" />
+    <div>
+        <button id="clear">Clear</button>
+        <button id="predict">Predict</button>
+    </div>
     <div id="result"></div>
 
     <!-- Include ONNX.js library -->
@@ -25,8 +21,6 @@
     <!-- Your custom script for drawing and prediction -->
     <script type="module" src="draw-and-predict.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
-      
+    <link rel="stylesheet" type="text/css" href="style.css">
 </body>
 </html>
-
-
